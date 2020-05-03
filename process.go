@@ -8,14 +8,23 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"math"
+	"github.com/mmcloughlin/geohash"
 )
 
-var MIN_COUNT_OF_PEOPLE int = 10
+const (
+    MIN_COUNT_OF_PEOPLE	= 10
+    SMALL_GRID_BITS = 7 //76m grid
+    MEDIUM_GRID_BITS = 6 //610m grid
+    LARGE_GRID_BITS = 5 //2.4km grid
+    VERY_LARGE_GRID_BITS = 4 //20km grid
+    LARGEST_GRID_BITS = 3 //78km grid
+)
+
 var rows [][]string
 
-func truncate(x float64, n float64) float64 {
-	return math.Floor(x*math.Pow(10,n))/math.Pow(10,n)
+func truncate(lat, lon float64, bits int) string {
+    str:= geohash.Encode(lat, lon)
+    return str[:bits+1]
 }
 
 func RemoveIndex(s []string, index int) []string {
@@ -33,15 +42,20 @@ func main() {
 	// Parse the file
 	r := csv.NewReader(csvfile)
 
-	grids100m := make(map[string]int)
-	grids1km := make(map[string]int)
-	grids10km := make(map[string]int)
-	grids100km := make(map[string]int)
+	smallGrid := make(map[string]int)
+	mediumGrid := make(map[string]int)
+	largeGrid := make(map[string]int)
+	veryLargeGrid := make(map[string]int)
+	largestGrid := make(map[string]int)
+
+	smallGridKeys := make(map[string]string)
+	mediumGridKeys := make(map[string]string)
+	largeGridKeys := make(map[string]string)
+	veryLargeGridKeys := make(map[string]string)
+	largestGridKeys := make(map[string]string)
 
 	count := 0
-	// Iterate through the records
 	for {
-		// Read each record from csv
 		record, err := r.Read()
 		if err == io.EOF {
 			break
@@ -59,40 +73,66 @@ func main() {
 			continue
 		}
 
-		lat, _ := strconv.ParseFloat(record[5], 64)
-		lon, _ := strconv.ParseFloat(record[6], 64)
-		created_on := strings.Split(record[1], " ")[0]
+		lat_str := record[5]
+		lon_str := record[6]
+		created_on_str := record[1]
 
-		key100m:=fmt.Sprintf("%f", truncate(lat,3)) + "," + fmt.Sprintf("%f", truncate(lon,3)) + "," + created_on
-		key1km:=fmt.Sprintf("%f", truncate(lat,2)) + "," + fmt.Sprintf("%f", truncate(lon,2)) + "," + created_on
-		key10km:=fmt.Sprintf("%f", truncate(lat,1)) + "," + fmt.Sprintf("%f", truncate(lon,1)) + "," + created_on
-		key100km:=fmt.Sprintf("%f", truncate(lat,0)+1) + "," + fmt.Sprintf("%f", truncate(lon,0)+1) + "," + created_on
+		lat, _ := strconv.ParseFloat(lat_str, 64)
+		lon, _ := strconv.ParseFloat(lon_str, 64)
+		created_on := strings.Split(created_on_str, " ")[0]
 
-		if _, ok := grids100m[key100m]; ok {
-			grids100m[key100m]+=1
+		smallGridHash := truncate(lat, lon, SMALL_GRID_BITS)
+		mediumGridHash := truncate(lat, lon, MEDIUM_GRID_BITS)
+		largeGridHash := truncate(lat, lon, LARGE_GRID_BITS)
+		veryLargeGridHash := truncate(lat, lon, VERY_LARGE_GRID_BITS)
+		largestGridHash := truncate(lat, lon, LARGEST_GRID_BITS)
+
+		//TODO: If files are on a per-day basis, this 
+		//overhead can be avoided
+		smallGridKey := smallGridHash + "," + created_on
+		mediumGridKey := mediumGridHash + "," + created_on
+		largeGridKey := largeGridHash + "," + created_on
+		veryLargeGridKey := veryLargeGridHash + "," + created_on
+		largestGridKey := largestGridHash + "," + created_on
+
+		//Store the geohashes in maps to avoid recomputing
+		lat_lon_key := lat_str + "," + lon_str
+		smallGridKeys[lat_lon_key] = smallGridHash
+		mediumGridKeys[lat_lon_key] = mediumGridHash
+		smallGridKeys[lat_lon_key] = largeGridHash
+		smallGridKeys[lat_lon_key] = veryLargeGridHash
+		largestGridKeys[lat_lon_key] = largestGridHash
+
+		if _, ok := smallGrid[smallGridKey]; ok {
+		    smallGrid[smallGridKey]+=1
 		} else {
-			grids100m[key100m]=1
+		    smallGrid[smallGridKey] =1
 		}
 
-		if _, ok := grids1km[key1km]; ok {
-			grids1km[key1km]+=1
+		if _, ok := mediumGrid[mediumGridKey]; ok {
+		    mediumGrid[mediumGridKey]+=1
 		} else {
-			grids1km[key1km]=1
+		    mediumGrid[mediumGridKey] =1
 		}
 
-		if _, ok := grids10km[key10km]; ok {
-			grids10km[key10km]+=1
+		if _, ok := largeGrid[largeGridKey]; ok {
+		    largeGrid[largeGridKey]+=1
 		} else {
-			grids10km[key10km]=1
+		    largeGrid[largeGridKey] =1
 		}
 
-		if _, ok := grids100km[key100km]; ok {
-			grids100km[key100km]+=1
+		if _, ok := veryLargeGrid[veryLargeGridKey]; ok {
+		    veryLargeGrid[veryLargeGridKey]+=1
 		} else {
-			grids100km[key100km]=1
+		    veryLargeGrid[veryLargeGridKey] =1
 		}
 
-		count += 1
+		if _, ok := largestGrid[largestGridKey]; ok {
+		    largestGrid[largestGridKey]+=1
+		} else {
+		    largestGrid[largestGridKey] =1
+		}
+
 	}
 
 	_, err = csvfile.Seek(0, io.SeekStart)
@@ -131,6 +171,12 @@ func main() {
 		record = RemoveIndex(record, 17)
 
 		if count == 0 {
+			//Remove lat
+			record = RemoveIndex(record, 5)
+			//Remove long
+			record = RemoveIndex(record, 5)
+			//Append a new field "geohash"
+			record = append(record, "geohash")
 			rows = append(rows, record)
 			count += 1
 			continue
@@ -140,55 +186,38 @@ func main() {
 			continue
 		}
 
-		lat, _ := strconv.ParseFloat(record[5], 64)
-		lon, _ := strconv.ParseFloat(record[6], 64)
-		created_on := strings.Split(record[1], " ")[0]
+		lat_str := record[5]
+		lon_str := record[6]
+		created_on_str := record[1]
 
-		key100m:=fmt.Sprintf("%f", truncate(lat,3)) + "," + fmt.Sprintf("%f", truncate(lon,3)) + "," + created_on
-		key1km:=fmt.Sprintf("%f", truncate(lat,2)) + "," + fmt.Sprintf("%f", truncate(lon,2)) + "," + created_on
-		key10km:=fmt.Sprintf("%f", truncate(lat,1)) + "," + fmt.Sprintf("%f", truncate(lon,1)) + "," + created_on
-		key100km:=fmt.Sprintf("%f", truncate(lat,0)+1) + "," + fmt.Sprintf("%f", truncate(lon,0)+1) + "," + created_on
+		created_on := strings.Split(created_on_str, " ")[0]
 
+		lat_lon_key:= lat_str + "," + lon_str
+		smallGridKey := smallGridKeys[lat_lon_key] + "," + created_on
+		mediumGridKey := mediumGridKeys[lat_lon_key] + "," + created_on
+		largeGridKey := largeGridKeys[lat_lon_key] + "," + created_on
+		veryLargeGridKey := veryLargeGridKeys[lat_lon_key] + "," + created_on
+		largestGridKey := largestGridKeys[lat_lon_key] + "," + created_on
 
-		if grids100m[key100m] >= MIN_COUNT_OF_PEOPLE {
-			splitKeys := strings.Split(key100m, ",")
+		//Remove lat fields
+		record = RemoveIndex(record, 5)
+		//Remove lon field
+		record = RemoveIndex(record, 5)
 
-			gridded_lat, _ := strconv.ParseFloat(splitKeys[0], 64)
-			record[5] = fmt.Sprintf("%f", gridded_lat)
-
-			gridded_lon, _ := strconv.ParseFloat(splitKeys[1], 64)
-			record[6] = fmt.Sprintf("%f", gridded_lon)
-
-		} else if grids1km[key1km] >= MIN_COUNT_OF_PEOPLE {
-			splitKeys := strings.Split(key1km, ",")
-
-			gridded_lat, _ := strconv.ParseFloat(splitKeys[0], 64)
-			record[5] = fmt.Sprintf("%f", gridded_lat)
-
-			gridded_lon, _ := strconv.ParseFloat(splitKeys[1], 64)
-			record[6] = fmt.Sprintf("%f", gridded_lon)
-		} else if grids10km[key10km] >= MIN_COUNT_OF_PEOPLE {
-			splitKeys := strings.Split(key10km, ",")
-
-			gridded_lat, _ := strconv.ParseFloat(splitKeys[0], 64)
-			record[5] = fmt.Sprintf("%f", gridded_lat)
-
-			gridded_lon, _ := strconv.ParseFloat(splitKeys[1], 64)
-			record[6] = fmt.Sprintf("%f", gridded_lon)
-		} else if grids100km[key100km] >= MIN_COUNT_OF_PEOPLE {
-			splitKeys := strings.Split(key100km, ",")
-
-			gridded_lat, _ := strconv.ParseFloat(splitKeys[0], 64)
-			record[5] = fmt.Sprintf("%f", gridded_lat)
-
-			gridded_lon, _ := strconv.ParseFloat(splitKeys[1], 64)
-			record[6] = fmt.Sprintf("%f", gridded_lon)
+		if smallGrid[smallGridKey] >= MIN_COUNT_OF_PEOPLE {
+		    record = append(record, smallGridKeys[lat_lon_key])
+		} else if mediumGrid[mediumGridKey] >= MIN_COUNT_OF_PEOPLE {
+		    record = append(record, mediumGridKeys[lat_lon_key])
+		} else if largeGrid[largeGridKey] >= MIN_COUNT_OF_PEOPLE {
+		    record = append(record, largeGridKeys[lat_lon_key])
+		} else if veryLargeGrid[veryLargeGridKey] >= MIN_COUNT_OF_PEOPLE {
+		    record = append(record, veryLargeGridKeys[lat_lon_key])
+		} else if largestGrid[largestGridKey] >= MIN_COUNT_OF_PEOPLE {
+		    record = append(record, largestGridKeys[lat_lon_key])
 		} else {
-			record[5] = fmt.Sprintf("%f", truncate(lat, 0) + 1)
-			record[6] = fmt.Sprintf("%f", truncate(lon, 0) + 1)
+		    record = append(record, largestGridKeys[lat_lon_key])
 		}
 
-		count += 1
 		rows = append(rows, record)
 	}
 
