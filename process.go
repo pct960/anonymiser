@@ -21,6 +21,12 @@ const (
 	LARGEST_GRID_BITS    = 3 //78km grid
 )
 
+const (
+	IP_FILE = "../non-gridded/covid_chat_03-05-20_000"
+	OP_FILE = "../gridded/covid_chat_details_realtime_03-05-2020.csv"
+)
+
+
 var rows [][]string
 
 func encode(lat, lon float64, bits int) string {
@@ -38,7 +44,7 @@ func RemoveIndex(s []string, index int) []string {
 
 func main() {
 	// Open the file
-	csvfile, err := os.Open("../data/output.csv")
+	csvfile, err := os.Open(IP_FILE)
 
 	if err != nil {
 		log.Fatalln("Couldn't open the csv file", err)
@@ -66,7 +72,9 @@ func main() {
 			break
 		}
 		if err != nil {
-			log.Fatal(err)
+			//log.Fatal(err)
+			fmt.Println(err)
+			continue
 		}
 
 		if count == 0 {
@@ -157,7 +165,9 @@ func main() {
 			break
 		}
 		if err != nil {
-			log.Fatal(err)
+			//log.Fatal(err)
+			fmt.Println(err)
+			continue
 		}
 
 		//Topic
@@ -227,7 +237,7 @@ func main() {
 		rows = append(rows, record)
 	}
 
-	f, err := os.Create("op-go.csv")
+	f, err := os.Create(OP_FILE)
 	if err != nil {
 		log.Fatal(err)
 	}
