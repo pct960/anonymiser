@@ -6,10 +6,8 @@ import (
 	"github.com/mmcloughlin/geohash"
 	"io"
 	"log"
-	"math"
 	"os"
 	"strconv"
-	"strings"
 )
 
 const (
@@ -22,21 +20,11 @@ const (
 )
 
 const (
-	IP_FILE = "../non-gridded/covid_chat_03-05-20_000"
-	OP_FILE = "../gridded/covid_chat_details_realtime_03-05-2020.csv"
+	IP_FILE = "misc/non-gridded.csv"
+	OP_FILE = "misc/fixed.csv"
 )
 
-
 var rows [][]string
-
-func encode(lat, lon float64, bits int) string {
-	str := geohash.Encode(lat, lon)
-	return str[:bits+1]
-}
-
-func truncate(x float64, n float64) float64 {
-	return math.Floor(x*math.Pow(10, n)) / math.Pow(10, n)
-}
 
 func RemoveIndex(s []string, index int) []string {
 	return append(s[:index], s[index+1:]...)
@@ -59,11 +47,11 @@ func main() {
 	veryLargeGrid := make(map[string]int)
 	largestGrid := make(map[string]int)
 
-	smallGridKeys := make(map[string]string)
-	mediumGridKeys := make(map[string]string)
-	largeGridKeys := make(map[string]string)
-	veryLargeGridKeys := make(map[string]string)
-	largestGridKeys := make(map[string]string)
+	smallGridCache := make(map[string]string)
+	mediumGridCache := make(map[string]string)
+	largeGridCache := make(map[string]string)
+	veryLargeGridCache := make(map[string]string)
+	largestGridCache := make(map[string]string)
 
 	count := 0
 	for {
@@ -71,83 +59,83 @@ func main() {
 		if err == io.EOF {
 			break
 		}
+
+		//Skip a record if there are errors in parsing it
 		if err != nil {
 			//log.Fatal(err)
 			fmt.Println(err)
 			continue
 		}
 
+		//Don't process the first line
 		if count == 0 {
 			count += 1
 			continue
 		}
 
+		//Skip a record if lat, long is null
 		if record[5] == "" || record[6] == "" {
 			continue
 		}
 
 		lat_str := record[5]
 		lon_str := record[6]
-		created_on_str := record[1]
 
 		lat, _ := strconv.ParseFloat(lat_str, 64)
 		lon, _ := strconv.ParseFloat(lon_str, 64)
-		created_on := strings.Split(created_on_str, " ")[0]
 
-		smallGridHash := encode(lat, lon, SMALL_GRID_BITS)
-		mediumGridHash := encode(lat, lon, MEDIUM_GRID_BITS)
-		largeGridHash := encode(lat, lon, LARGE_GRID_BITS)
-		veryLargeGridHash := encode(lat, lon, VERY_LARGE_GRID_BITS)
-		largestGridHash := encode(lat, lon, LARGEST_GRID_BITS)
-
-		//TODO: If files are on a per-day basis, this
-		//overhead can be avoided
-		smallGridKey := smallGridHash + "," + created_on
-		mediumGridKey := mediumGridHash + "," + created_on
-		largeGridKey := largeGridHash + "," + created_on
-		veryLargeGridKey := veryLargeGridHash + "," + created_on
-		largestGridKey := largestGridHash + "," + created_on
+		//Get the geohash for all grid sizes from the lat,long pair
+		smallGridHash := geohash.EncodeWithPrecision(lat, lon, SMALL_GRID_BITS)
+		mediumGridHash := geohash.EncodeWithPrecision(lat, lon, MEDIUM_GRID_BITS)
+		largeGridHash := geohash.EncodeWithPrecision(lat, lon, LARGE_GRID_BITS)
+		veryLargeGridHash := geohash.EncodeWithPrecision(lat, lon, VERY_LARGE_GRID_BITS)
+		largestGridHash := geohash.EncodeWithPrecision(lat, lon, LARGEST_GRID_BITS)
 
 		//Store the geohashes in maps to avoid recomputing
 		lat_lon_key := lat_str + "," + lon_str
-		smallGridKeys[lat_lon_key] = smallGridHash
-		mediumGridKeys[lat_lon_key] = mediumGridHash
-		smallGridKeys[lat_lon_key] = largeGridHash
-		smallGridKeys[lat_lon_key] = veryLargeGridHash
-		largestGridKeys[lat_lon_key] = largestGridHash
+		smallGridCache[lat_lon_key] = smallGridHash
+		mediumGridCache[lat_lon_key] = mediumGridHash
+		largeGridCache[lat_lon_key] = largeGridHash
+		veryLargeGridCache[lat_lon_key] = veryLargeGridHash
+		largestGridCache[lat_lon_key] = largestGridHash
 
-		if _, ok := smallGrid[smallGridKey]; ok {
-			smallGrid[smallGridKey] += 1
+		/*TODO: Some optimisation is possible here.
+		*If the count reaches MIN_COUNT_OF_PEOPLE during the first pass,
+		*there's no need to go over all records in the second pass
+		*/
+
+		if _, ok := smallGrid[smallGridHash]; ok {
+			smallGrid[smallGridHash] += 1
 		} else {
-			smallGrid[smallGridKey] = 1
+			smallGrid[smallGridHash] = 1
 		}
 
-		if _, ok := mediumGrid[mediumGridKey]; ok {
-			mediumGrid[mediumGridKey] += 1
+		if _, ok := mediumGrid[mediumGridHash]; ok {
+			mediumGrid[mediumGridHash] += 1
 		} else {
-			mediumGrid[mediumGridKey] = 1
+			mediumGrid[mediumGridHash] = 1
 		}
 
-		if _, ok := largeGrid[largeGridKey]; ok {
-			largeGrid[largeGridKey] += 1
+		if _, ok := largeGrid[largeGridHash]; ok {
+			largeGrid[largeGridHash] += 1
 		} else {
-			largeGrid[largeGridKey] = 1
+			largeGrid[largeGridHash] = 1
 		}
 
-		if _, ok := veryLargeGrid[veryLargeGridKey]; ok {
-			veryLargeGrid[veryLargeGridKey] += 1
+		if _, ok := veryLargeGrid[veryLargeGridHash]; ok {
+			veryLargeGrid[veryLargeGridHash] += 1
 		} else {
-			veryLargeGrid[veryLargeGridKey] = 1
+			veryLargeGrid[veryLargeGridHash] = 1
 		}
 
-		if _, ok := largestGrid[largestGridKey]; ok {
-			largestGrid[largestGridKey] += 1
+		if _, ok := largestGrid[largestGridHash]; ok {
+			largestGrid[largestGridHash] += 1
 		} else {
-			largestGrid[largestGridKey] = 1
+			largestGrid[largestGridHash] = 1
 		}
-
 	}
 
+	//Rewind file to avoid another I/O overhead
 	_, err = csvfile.Seek(0, io.SeekStart)
 
 	if err != nil {
@@ -157,6 +145,12 @@ func main() {
 	r = csv.NewReader(csvfile)
 
 	count = 0
+	smallGridCount := 0
+	mediumGridCount := 0
+	largeGridCount :=0
+	veryLargeGridCount := 0
+	largestGridCount := 0
+	outlierCount := 0
 
 	for {
 		// Read each record from csv
@@ -197,52 +191,65 @@ func main() {
 
 		lat_str := record[5]
 		lon_str := record[6]
-		created_on_str := record[1]
-
-		created_on := strings.Split(created_on_str, " ")[0]
 
 		lat_lon_key := lat_str + "," + lon_str
-		smallGridKey := smallGridKeys[lat_lon_key] + "," + created_on
-		mediumGridKey := mediumGridKeys[lat_lon_key] + "," + created_on
-		largeGridKey := largeGridKeys[lat_lon_key] + "," + created_on
-		veryLargeGridKey := veryLargeGridKeys[lat_lon_key] + "," + created_on
-		largestGridKey := largestGridKeys[lat_lon_key] + "," + created_on
+		smallGridHash := smallGridCache[lat_lon_key]
+		mediumGridHash := mediumGridCache[lat_lon_key]
+		largeGridHash := largeGridCache[lat_lon_key]
+		veryLargeGridHash := veryLargeGridCache[lat_lon_key]
+		largestGridHash := largestGridCache[lat_lon_key]
 
-		if smallGrid[smallGridKey] >= MIN_COUNT_OF_PEOPLE {
-			decoded_lat, decoded_lon := geohash.DecodeCenter(smallGridKeys[lat_lon_key])
-			record[5] = fmt.Sprintf("%f", truncate(decoded_lat, 3))
-			record[6] = fmt.Sprintf("%f", truncate(decoded_lon, 3))
-		} else if mediumGrid[mediumGridKey] >= MIN_COUNT_OF_PEOPLE {
-			decoded_lat, decoded_lon := geohash.DecodeCenter(mediumGridKeys[lat_lon_key])
-			record[5] = fmt.Sprintf("%f", truncate(decoded_lat, 3))
-			record[6] = fmt.Sprintf("%f", truncate(decoded_lon, 3))
-		} else if largeGrid[largeGridKey] >= MIN_COUNT_OF_PEOPLE {
-			decoded_lat, decoded_lon := geohash.DecodeCenter(largeGridKeys[lat_lon_key])
-			record[5] = fmt.Sprintf("%f", truncate(decoded_lat, 3))
-			record[6] = fmt.Sprintf("%f", truncate(decoded_lon, 3))
-		} else if veryLargeGrid[veryLargeGridKey] >= MIN_COUNT_OF_PEOPLE {
-			decoded_lat, decoded_lon := geohash.DecodeCenter(veryLargeGridKeys[lat_lon_key])
-			record[5] = fmt.Sprintf("%f", truncate(decoded_lat, 3))
-			record[6] = fmt.Sprintf("%f", truncate(decoded_lon, 3))
-		} else if largestGrid[largestGridKey] >= MIN_COUNT_OF_PEOPLE {
-			decoded_lat, decoded_lon := geohash.DecodeCenter(largestGridKeys[lat_lon_key])
-			record[5] = fmt.Sprintf("%f", truncate(decoded_lat, 3))
-			record[6] = fmt.Sprintf("%f", truncate(decoded_lon, 3))
+		if smallGrid[smallGridHash] >= MIN_COUNT_OF_PEOPLE {
+			decoded_lat, decoded_lon := geohash.DecodeCenter(smallGridCache[lat_lon_key])
+			record[5] = fmt.Sprintf("%f", decoded_lat)
+			record[6] = fmt.Sprintf("%f", decoded_lon)
+			smallGridCount += 1
+		} else if mediumGrid[mediumGridHash] >= MIN_COUNT_OF_PEOPLE {
+			decoded_lat, decoded_lon := geohash.DecodeCenter(mediumGridCache[lat_lon_key])
+			record[5] = fmt.Sprintf("%f", decoded_lat)
+			record[6] = fmt.Sprintf("%f", decoded_lon)
+			mediumGridCount += 1
+		} else if largeGrid[largeGridHash] >= MIN_COUNT_OF_PEOPLE {
+			decoded_lat, decoded_lon := geohash.DecodeCenter(largeGridCache[lat_lon_key])
+			record[5] = fmt.Sprintf("%f", decoded_lat)
+			record[6] = fmt.Sprintf("%f", decoded_lon)
+			largeGridCount += 1
+		} else if veryLargeGrid[veryLargeGridHash] >= MIN_COUNT_OF_PEOPLE {
+			decoded_lat, decoded_lon := geohash.DecodeCenter(veryLargeGridCache[lat_lon_key])
+			record[5] = fmt.Sprintf("%f", decoded_lat)
+			record[6] = fmt.Sprintf("%f", decoded_lon)
+			veryLargeGridCount += 1
+		} else if largestGrid[largestGridHash] >= MIN_COUNT_OF_PEOPLE {
+			decoded_lat, decoded_lon := geohash.DecodeCenter(largestGridCache[lat_lon_key])
+			record[5] = fmt.Sprintf("%f", decoded_lat)
+			record[6] = fmt.Sprintf("%f", decoded_lon)
+			largestGridCount += 1
 		} else {
-			decoded_lat, decoded_lon := geohash.DecodeCenter(largestGridKeys[lat_lon_key])
-			record[5] = fmt.Sprintf("%f", truncate(decoded_lat, 3))
-			record[6] = fmt.Sprintf("%f", truncate(decoded_lon, 3))
+			decoded_lat, decoded_lon := geohash.DecodeCenter(largestGridCache[lat_lon_key])
+			record[5] = fmt.Sprintf("%f", decoded_lat)
+			record[6] = fmt.Sprintf("%f", decoded_lon)
+			outlierCount += 1
 		}
 
 		rows = append(rows, record)
+		count += 1
 	}
 
+	fmt.Println("76m=", smallGridCount)
+	fmt.Println("610m=", mediumGridCount)
+	fmt.Println("2.4km=", largeGridCount)
+	fmt.Println("20km=", veryLargeGridCount)
+	fmt.Println("78km=", largestGridCount)
+	fmt.Println("Outliers=", outlierCount)
+	fmt.Println("Total=", count)
+
+	//Write to the output file
 	f, err := os.Create(OP_FILE)
 	if err != nil {
 		log.Fatal(err)
 	}
 	err = csv.NewWriter(f).WriteAll(rows)
-	f.Close()
+	_ = f.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
