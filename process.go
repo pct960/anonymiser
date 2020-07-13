@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"time"
 )
 
 const (
@@ -19,12 +20,11 @@ const (
 	LARGEST_GRID_BITS    = 3 //78km grid
 )
 
-const (
-	IP_FILE = "misc/non-gridded.csv"
-	OP_FILE = "misc/fixed.csv"
-)
-
 var rows [][]string
+var prevDay = time.Now().AddDate(0,0,-1)
+var IP_FILE = "../non-gridded/covid_chat_" + prevDay.Format("02-01-06") + "_000"
+var OP_FILE = "../gridded/covid_chat_details_realtime_" + prevDay.Format("02-01-2006") + ".csv"
+
 
 func RemoveIndex(s []string, index int) []string {
 	return append(s[:index], s[index+1:]...)
@@ -53,6 +53,7 @@ func main() {
 	veryLargeGridCache := make(map[string]string)
 	largestGridCache := make(map[string]string)
 
+	//PASS 1: Compute all grids and their respective member count
 	count := 0
 	for {
 		record, err := r.Read()
@@ -144,6 +145,8 @@ func main() {
 
 	r = csv.NewReader(csvfile)
 
+	//PASS 2: Assign smallest grid to [lat, long] such that member_count >= MIN_COUNT_OF_PEOPLE  
+
 	count = 0
 	smallGridCount := 0
 	mediumGridCount := 0
@@ -180,6 +183,7 @@ func main() {
 		record = RemoveIndex(record, 17)
 
 		if count == 0 {
+			record = append(record, "geohash")
 			rows = append(rows, record)
 			count += 1
 			continue
@@ -203,31 +207,37 @@ func main() {
 			decoded_lat, decoded_lon := geohash.DecodeCenter(smallGridCache[lat_lon_key])
 			record[5] = fmt.Sprintf("%f", decoded_lat)
 			record[6] = fmt.Sprintf("%f", decoded_lon)
+			record = append(record, smallGridHash)
 			smallGridCount += 1
 		} else if mediumGrid[mediumGridHash] >= MIN_COUNT_OF_PEOPLE {
 			decoded_lat, decoded_lon := geohash.DecodeCenter(mediumGridCache[lat_lon_key])
 			record[5] = fmt.Sprintf("%f", decoded_lat)
 			record[6] = fmt.Sprintf("%f", decoded_lon)
+			record = append(record, mediumGridHash)
 			mediumGridCount += 1
 		} else if largeGrid[largeGridHash] >= MIN_COUNT_OF_PEOPLE {
 			decoded_lat, decoded_lon := geohash.DecodeCenter(largeGridCache[lat_lon_key])
 			record[5] = fmt.Sprintf("%f", decoded_lat)
 			record[6] = fmt.Sprintf("%f", decoded_lon)
+			record = append(record, largeGridHash)
 			largeGridCount += 1
 		} else if veryLargeGrid[veryLargeGridHash] >= MIN_COUNT_OF_PEOPLE {
 			decoded_lat, decoded_lon := geohash.DecodeCenter(veryLargeGridCache[lat_lon_key])
 			record[5] = fmt.Sprintf("%f", decoded_lat)
 			record[6] = fmt.Sprintf("%f", decoded_lon)
+			record = append(record, veryLargeGridHash)
 			veryLargeGridCount += 1
 		} else if largestGrid[largestGridHash] >= MIN_COUNT_OF_PEOPLE {
 			decoded_lat, decoded_lon := geohash.DecodeCenter(largestGridCache[lat_lon_key])
 			record[5] = fmt.Sprintf("%f", decoded_lat)
 			record[6] = fmt.Sprintf("%f", decoded_lon)
+			record = append(record, largestGridHash)
 			largestGridCount += 1
 		} else {
 			decoded_lat, decoded_lon := geohash.DecodeCenter(largestGridCache[lat_lon_key])
 			record[5] = fmt.Sprintf("%f", decoded_lat)
 			record[6] = fmt.Sprintf("%f", decoded_lon)
+			record = append(record, largestGridHash)
 			outlierCount += 1
 		}
 
