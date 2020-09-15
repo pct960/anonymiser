@@ -24,6 +24,7 @@ var rows [][]string
 var prevDay = time.Now().AddDate(0,0,-1)
 var IP_FILE = "non-gridded/covid_chat_000"
 var OP_FILE = "gridded/covid_chat_details_realtime_" + prevDay.Format("02-01-2006") + ".csv"
+//var OP_FILE = "gridded/covid_chat_details_realtime_02-08-2020.csv"
 
 func RemoveIndex(s []string, index int) []string {
 	return append(s[:index], s[index+1:]...)
