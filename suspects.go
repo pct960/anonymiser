@@ -57,8 +57,8 @@ const (
 
 var rows [][]string
 var prevDay = time.Now().AddDate(0,0,-1)
-var IP_FILE = "non-gridded/bangaloreSuspects.csv"
-var OP_FILE = "gridded/bangalore_suspects_anonymised.csv"
+var IP_FILE = "bangalore_suspects.csv"
+var OP_FILE = "bangalore_suspects_anonymised.csv"
 
 func main() {
 	// Open the file
